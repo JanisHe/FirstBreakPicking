@@ -206,3 +206,24 @@ class UNet(nn.Module):
     def crop(tensor, target_tensor):
         _, _, h, w = target_tensor.size()
         return tensor[:, :, :h, :w]
+
+    def get_model_args(self):
+        """
+        Returning dictionary with all input arguments for U-Net
+        :return:
+        """
+        model_args = dict()
+        model_args["in_channels"] = self.in_channels
+        model_args["out_channels"] = self.out_channels
+        model_args["filter_root"] = self.filters_root
+        model_args["kernel_size"] = self.kernel_size
+        model_args["stride"] = self.stride
+        model_args["depth"] = self.depth
+        model_args["activation"] = self.activation
+        model_args["output_activation"] = self.output_activation
+        model_args["input_shape"] = self.input_shape
+        model_args["drop_rate"] = self.drop_rate
+        model_args["skip_connections"] = self.skip_connections
+        model_args["attention"] = self.attention
+
+        return model_args

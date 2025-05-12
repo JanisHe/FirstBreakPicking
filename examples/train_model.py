@@ -1,5 +1,8 @@
+import os
 import glob
+import json
 import torch
+import pathlib
 
 from torch.utils.data import DataLoader
 from torchsummary import summary
@@ -93,6 +96,11 @@ for epoch in range(epochs):
         # Determine average training and validation loss
         avg_train_loss.append(sum(train_loss) / len(train_loss))
         avg_valid_loss.append(sum(valid_loss) / len(valid_loss))
+
+        if epoch == 0:  # Save model_args as .json file after finishing of first epoch
+            json_fp = os.path.join(pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json")
+            with open(json_fp, "w") as json_fp:
+                json.dump(model.get_model_args(), json_fp, indent=4)
 
         print(f"Epoch {epoch + 1} | train loss: {avg_train_loss[-1]:.5f} | val loss: {avg_valid_loss[-1]:.5f}")
 
