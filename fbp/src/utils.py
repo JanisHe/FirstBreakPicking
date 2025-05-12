@@ -494,15 +494,35 @@ def add_noise(dataset: np.array,
     return dataset
 
 
+def residual_histogram(residuals,
+                       axes,
+                       bins=60,
+                       xlim=(-100, 100)):
+
+    counts, bins = np.histogram(residuals,
+                                bins=bins,
+                                range=xlim)
+    axes.hist(bins[:-1], bins,
+              weights=counts,
+              edgecolor="b")
+
+    return axes
+
+
 def gaussian(x, mu, sig):
     return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
 
-def gaussian_kernel(kernel_size, sigma, normalised=True):
+def gaussian_kernel(sigma, normalised=True, truncate=4.0, radius=None):
     '''
     Generates a n x n matrix with a centered gaussian
     of standard deviation std centered on it. If normalised,
     its volume equals 1.'''
+    if not radius:
+        kernel_size = 2 * np.round(truncate * sigma) + 1
+    else:
+        kernel_size = 2 * radius + 1
+
     gaussian1D = signal.gaussian(kernel_size, sigma)
     gaussian2D = np.outer(gaussian1D, gaussian1D)
     if normalised:

@@ -6,15 +6,17 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import AnchoredText
 
 from scipy.ndimage import gaussian_filter
-from fbp.src.utils import detect_phases, predict_dataset
+from fbp.src.utils import detect_phases, predict_dataset, residual_histogram, is_nan
 from fbp.src.unet import UNet
 
 
 # Load npz files for testing and define the trained model
-npz_files = glob.glob("/scratch/gpi/seis/HIPER2/delsuc/Seisbench/PhaseNet_DAS_03_04_2025/data_npz/*")[:]
-model_filename = "/scratch/gpi/seis/HIPER2/delsuc/Seisbench/PhaseNet_DAS_03_04_2025/models/test.pt"
+npz_files = glob.glob("/scratch/gpi/seis/HIPER2/delsuc/Seisbench/PhaseNet_DAS_03_04_2025/data_npz/P23_P.npz")[:]
+model_filename = "/scratch/gpi/seis/HIPER2/delsuc/Seisbench/PhaseNet_DAS_03_04_2025/models/seminar_skip_att_no_drop_weights.pt"
+residual = 0.5  # Residual in seconds to compute metrics when testing models
 
 # Define model (must match with trained model)
 # Improvement to store arguments in json file and load a separate json file instead
@@ -60,6 +62,11 @@ prediction = gaussian_filter(prediction, sigma=10)
 detections_single = detect_phases(prediction=prediction,
                                   threshold=0.5)
 
+# Define empty arrays for metrics
+true_picks = []
+true_positives = []  # List with residuals of all true positive picks, i.e. picks that are detected and included in metadata
+false_positives = [] # Picks that are false detected, ie no manually picks is close to that pick
+
 # Plot prediction and traces
 fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True)
 ax1.set_xlim([0, data.shape[0]])
@@ -74,6 +81,8 @@ for l in range(data.shape[0]):
     p_arrival_seconds = metadata.loc[l, "trace_P_arrival_sample"] / metadata.loc[l, "sampling_rate"]
     ax1.plot([l, l + 1], [p_arrival_seconds, p_arrival_seconds], color="tab:orange", linewidth=2)
     ax2.plot([l, l + 1], [p_arrival_seconds, p_arrival_seconds], color="tab:orange", linewidth=2)
+    if is_nan(p_arrival_seconds) == False:
+        true_picks.append(p_arrival_seconds)
 
     # Plot prediction
     time_prediction = np.linspace(start=0,
@@ -86,10 +95,33 @@ for l in range(data.shape[0]):
     if np.std(detections[l]) <= 5:
         ax2.plot([l, l + 1], [detections_seconds, detections_seconds], color="r", linewidth=2)
 
+        # Compute metrics
+        if np.abs(detections_seconds - p_arrival_seconds) <= residual:
+            true_positives.append(detections_seconds - p_arrival_seconds)
+        elif np.abs(detections_seconds - p_arrival_seconds) > residual:
+            false_positives.append(detections_seconds - p_arrival_seconds)
+
     # Further improvements:
     # If number of neighbouring picks is below a certain threshold, then ignore the predicted picks
 
 # Plot prediction
 ax1.pcolormesh(np.arange(data.shape[0]), time_prediction, prediction.T)
 ax2.pcolormesh(np.arange(data.shape[0]), time_prediction, prediction.T)
+
+# Plot pick performance
+fig, ax_residual = plt.subplots(nrows=1, ncols=1)
+residual_histogram(residuals=true_positives,
+                   axes=ax_residual,
+                   xlim=(-residual, residual))
+ax_residual.set_title("First-break residual")
+ax_residual.set_xlabel("$t_{pred}$ - $t_{true}$ (s)")
+ax_residual.set_ylabel("Count")
+tpr_text_box = AnchoredText(s=f"TPR: {len(true_positives) / len(true_picks):.2f}",
+                            frameon=False,
+                            loc="upper left",
+                            pad=0.5)
+plt.setp(tpr_text_box.patch,
+         facecolor='white',
+         alpha=0.5)
+ax_residual.add_artist(tpr_text_box)
 plt.show()
