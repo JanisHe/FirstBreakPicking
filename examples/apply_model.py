@@ -1,4 +1,7 @@
+import os
 import glob
+import json
+import pathlib
 import random
 
 import torch
@@ -14,27 +17,23 @@ from fbp.src.unet import UNet
 
 
 # Load npz files for testing and define the trained model
-npz_files = glob.glob("/scratch/gpi/seis/HIPER2/delsuc/Seisbench/PhaseNet_DAS_03_04_2025/data_npz/P23_P.npz")[:]
-model_filename = "/scratch/gpi/seis/HIPER2/delsuc/Seisbench/PhaseNet_DAS_03_04_2025/models/seminar_skip_att_no_drop_weights.pt"
+npz_files = glob.glob("/scratch/gpi/seis/jheuel/FirstBreakPicking/test_files/*.npz")[:]
+model_filename = "/scratch/gpi/seis/jheuel/FirstBreakPicking/models/model1.pt"
+metadata_path = "/scratch/gpi/seis/jheuel/FirstBreakPicking/metadata"
 residual = 0.5  # Residual in seconds to compute metrics when testing models
 
-# Define model (must match with trained model)
-# Improvement to store arguments in json file and load a separate json file instead
-model = UNet(depth=5,
-             kernel_size=(3, 7),
-             stride=(3, 3),
-             skip_connections=True,
-             out_channels=2,
-             filters_root=8,
-             output_activation=torch.nn.Softmax(dim=1),
-             drop_rate=0.0,
-             attention=True)
+# Define model (must match with trained model) by loading json file
+json_fp = os.path.join(pathlib.Path(model_filename).parent, f"{pathlib.Path(model_filename).stem}.json")
+with open(json_fp, "r") as f_json:
+    model_args = json.load(f_json)
+
+model = UNet(**model_args)
 
 # Select a random npz file and read metadata to load manually labeled first break picks
 filename_npz = random.choice(npz_files)
 print(filename_npz)
 data = np.load(filename_npz)["data"]
-metadata = pd.read_csv(f"/scratch/gpi/seis/HIPER2/delsuc/Seisbench/PhaseNet_DAS_03_04_2025/metadata/metadata{Path(filename_npz).stem}.csv")
+metadata = pd.read_csv(os.path.join(metadata_path, f"metadata{Path(filename_npz).stem}.csv"))
 
 # Load weights of model
 model_weights = torch.load(model_filename, map_location=torch.device("cpu"))
