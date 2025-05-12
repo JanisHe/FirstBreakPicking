@@ -67,7 +67,8 @@ class UNet(nn.Module):
         self.skip_connections = skip_connections
         self.input_shape = input_shape
         self.attention = attention
-        self.dropout = nn.Dropout(p=drop_rate)
+        self.drop_rate = drop_rate
+        self.dropout = nn.Dropout(p=self.drop_rate)
 
         self.inc = nn.Conv2d(in_channels=self.in_channels,
                              out_channels=self.filters_root,
