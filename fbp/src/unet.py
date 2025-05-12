@@ -220,8 +220,6 @@ class UNet(nn.Module):
         model_args["kernel_size"] = self.kernel_size
         model_args["stride"] = self.stride
         model_args["depth"] = self.depth
-        model_args["activation"] = self.activation
-        model_args["output_activation"] = self.output_activation
         model_args["input_shape"] = self.input_shape
         model_args["drop_rate"] = self.drop_rate
         model_args["skip_connections"] = self.skip_connections
