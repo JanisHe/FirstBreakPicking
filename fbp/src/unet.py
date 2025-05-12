@@ -216,7 +216,7 @@ class UNet(nn.Module):
         model_args = dict()
         model_args["in_channels"] = self.in_channels
         model_args["out_channels"] = self.out_channels
-        model_args["filter_root"] = self.filters_root
+        model_args["filters_root"] = self.filters_root
         model_args["kernel_size"] = self.kernel_size
         model_args["stride"] = self.stride
         model_args["depth"] = self.depth
