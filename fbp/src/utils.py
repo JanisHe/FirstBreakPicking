@@ -117,29 +117,29 @@ class MeanSquaredError:
         return mse
 
 
-# class FocalLoss:
-#     def __init__(self,
-#                  alpha: float = 0.25,
-#                  gamma: float = 2,
-#                  reduction: str = "mean"):
-#         self.alpha = alpha
-#         self.gamma = gamma
-#         self.reduction = reduction
-#
-#     def __call__(self,
-#                  input,
-#                  target):
-#         val =  torchvision.ops.sigmoid_focal_loss(inputs=input,
-#                                                   targets=target,
-#                                                   alpha=self.alpha,
-#                                                   gamma=self.gamma,
-#                                                   reduction=self.reduction)
-#
-#         if self.reduction == "none":
-#             val = val.mean(-1).sum(-1)
-#             val = val.mean()
-#
-#         return val
+class FocalLoss:
+    def __init__(self,
+                 alpha: float = 0.25,
+                 gamma: float = 2,
+                 reduction: str = "mean"):
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def __call__(self,
+                 input,
+                 target):
+        val =  torchvision.ops.sigmoid_focal_loss(inputs=input,
+                                                  targets=target,
+                                                  alpha=self.alpha,
+                                                  gamma=self.gamma,
+                                                  reduction=self.reduction)
+
+        if self.reduction == "none":
+            val = val.mean(-1).sum(-1)
+            val = val.mean()
+
+        return val
 
 
 class DataSetTest1OutChannel(Dataset):
@@ -233,6 +233,7 @@ def predict_dataset(data: np.array,
         trace.resample(sampling_rate=new_sampling_rate)
 
         # Write trace to array
+        trace.data -= np.mean(trace.data)
         resampled_data[idx, :] = trace.data / np.max(np.abs(trace.data))
 
     # Reshape resampled data
