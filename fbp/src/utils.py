@@ -1,21 +1,19 @@
-import os
-import warnings
 import tqdm
-from typing import Union
+import warnings
+import torch
+import obspy
+import torchvision
 
 import numpy as np
-import torch
-import torch.nn as nn
-from obspy import UTCDateTime
-from torch.utils.data import Dataset
 import pandas as pd
-import torch.nn.init as init
-import obspy
-import seisbench.models as sbm  # noqa
+import torch.nn as nn
+
+from typing import Union
+from obspy import UTCDateTime
 from scipy import signal
+import seisbench.models as sbm  # noqa
 
-from pathlib import Path
-
+from torch.utils.data import Dataset
 
 
 def is_nan(x):
@@ -529,3 +527,44 @@ def gaussian_kernel(sigma, normalised=True, truncate=4.0, radius=None):
     if normalised:
         gaussian2D /= (2 * np.pi * (sigma ** 2))
     return gaussian2D
+
+
+def predict_with_phasenet(data: np.array,
+                          phasenet_model,
+                          metadata: pd.DataFrame,
+                          filter_kwargs: Union[None, dict] = None,
+                          **kwargs):
+    """
+
+    :param data:
+    :param phasenet_model:
+    :param metadata:
+    :param kwargs:
+    :return:
+    """
+    all_picks = []
+    for idx in range(data.shape[0]):
+        zeros = np.zeros(len(data[idx, :]))
+        trace_data = np.array([data[idx, :], zeros, zeros])
+        stream = obspy.Stream()
+        for i, c in zip(range(3), "ZNE"):
+            trace = obspy.Trace(data=trace_data[i, :],
+                                header={"sampling_rate": metadata.loc[idx, "sampling_rate"],
+                                        "channel": f"HH{c}"})
+            stream.append(trace=trace)
+
+        # Filter stream
+        if filter_kwargs:
+            stream.filter(**filter_kwargs)
+
+        # Annotate stream
+        picks = phasenet_model.classify(stream, batch_size=64, **kwargs).picks
+
+        # Write picks into output array / convert to samples
+        trace_picks = []
+        for pick in picks:
+            trace_picks.append(int((pick.peak_time - stream[0].stats.starttime) * metadata.loc[idx, "sampling_rate"]))
+
+        all_picks.append(trace_picks)
+
+    return all_picks
