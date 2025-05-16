@@ -195,8 +195,28 @@ class FBP2OutChannels(Dataset):
         return self.data.classes
 
 
+def blinding(prediction: np.array,
+             blinding_x: int = 4,
+             blinding_y: int = 20) -> np.array:
+    """
+    Apply blinding on prediction in x and y direction (both in samples)
+
+    :param prediction:
+    :param blinding_x:
+    :param blinding_y:
+    :return:
+    """
+    if blinding_x > 0:
+        prediction[:blinding_x, :] = np.nan
+        prediction[-blinding_x:, :] = np.nan
+    if blinding_y > 0:
+        prediction[:, :blinding_y] = np.nan
+        prediction[:, -blinding_y:] = np.nan
+
+    return prediction
+
+
 def predict_dataset(data: np.array,
-                    model_shape: tuple,
                     model,
                     metadata: Union[pd.DataFrame, None] = None,
                     overlap: float=0.5,
@@ -206,6 +226,8 @@ def predict_dataset(data: np.array,
                     detection_threshold: float = 0.5,
                     sampling_rate: Union[None, float]=None,
                     filter_kwargs: Union[None, dict]=None):
+
+    model_shape = (model.in_channels, *model.input_shape)  # Estimate input shape of data from loaded model
     resampled_data = np.empty(shape=(data.shape[0], model_shape[-1]))  # Shape num. of traces times resampled length of each trace
     detections = {}  # key is trace idx and item is list with detections for each single prediction
 
@@ -252,15 +274,11 @@ def predict_dataset(data: np.array,
             prediction = model(torch_tensor)
         
         # Apply blinding on prediction in x and y direction (both in samples)
-        prediction = prediction.detach().numpy()[0, 0, :, :]
-        if blinding_x > 0:
-            prediction[:blinding_x, :] = np.nan  # np.zeros((blinding, prediction.shape[1]))
-            prediction[-blinding_x:, :] = np.nan  # np.zeros((blinding, prediction.shape[1]))
-        if blinding_y > 0:
-            prediction[:, :blinding_y] = np.nan
-            prediction[:, -blinding_y:] = np.nan
+        prediction = blinding(prediction=prediction.detach().numpy()[0, 0, :, :],
+                              blinding_x=blinding_x,
+                              blinding_y=blinding_y)
 
-        # TODO: Predict on single predictions without any overlapping traces
+        # Predict phase onset on single predictions without any overlapping traces
         detected_phase = detect_phases(prediction,
                                        threshold=detection_threshold)
         for idx_detect, value in zip(np.arange(idx_trace_start, idx_trace_end), detected_phase):
@@ -298,14 +316,9 @@ def predict_dataset(data: np.array,
         prediction = model(torch_tensor)
 
         # Apply blinding on prediction in x and y direction (both in samples)
-        # TODO: Code is doubled
-        prediction = prediction.detach().numpy()[0, 0, :, :]
-        if blinding_x > 0:
-            prediction[:blinding_x, :] = np.nan
-            prediction[-blinding_x:, :] = np.nan
-        if blinding_y > 0:
-            prediction[:, :blinding_y] = np.nan
-            prediction[:, -blinding_y:] = np.nan
+        prediction = blinding(prediction=prediction.detach().numpy()[0, 0, :, :],
+                              blinding_x=blinding_x,
+                              blinding_y=blinding_y)
 
         # TODO: This code is doubled
         detected_phase = detect_phases(prediction,
