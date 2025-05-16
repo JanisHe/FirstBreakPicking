@@ -240,6 +240,8 @@ def model_prediction(
     detected_phase = detect_phases(prediction, threshold=detection_threshold)
     for idx_detect, value in zip(np.arange(idx_start, idx_end), detected_phase):
         if idx_detect not in detections.keys():
+            if idx_detect < 0:
+                idx_detect = predicted_output.shape[1] + idx_detect
             detections.update({idx_detect: []})
         if is_nan(value) == False:
             detections[idx_detect].append(value)

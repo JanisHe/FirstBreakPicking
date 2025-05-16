@@ -18,7 +18,7 @@ from fbp.src.unet import UNet
 
 # Load npz files for testing and define the trained model
 npz_files = glob.glob("/scratch/gpi/seis/jheuel/FirstBreakPicking/test_files/*.npz")[:]
-model_filename = "/scratch/gpi/seis/jheuel/FirstBreakPicking/models/model1.pt"
+model_filename = "/scratch/gpi/seis/jheuel/FirstBreakPicking/models/fbp_attention.pt"
 metadata_path = "/scratch/gpi/seis/jheuel/FirstBreakPicking/metadata"
 residual = 0.5  # Residual in seconds to compute metrics when testing models
 
@@ -43,7 +43,6 @@ model.eval()
 # Predict data with loaded model
 shape = (model.in_channels, *model.input_shape)
 prediction, detections = predict_dataset(data=data,
-                                         model_shape=shape,
                                          model=model,
                                          metadata=metadata,
                                          overlap=0.95,
