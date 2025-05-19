@@ -259,19 +259,54 @@ def model_prediction(
     return predicted_output
 
 
-def predict_dataset(
-    data: np.array,
-    model,
-    metadata: Union[pd.DataFrame, None] = None,
-    overlap: float = 0.5,
-    blinding_x: int = 4,
-    blinding_y: int = 20,
-    stacking: str = "avg",
-    detection_threshold: float = 0.5,
-    sampling_rate: Union[None, float] = None,
-    filter_kwargs: Union[None, dict] = None,
-):
+def predict_dataset(data: np.array,
+                    model,
+                    metadata: Union[pd.DataFrame, None] = None,
+                    sampling_rate: Union[None, float] = None,
+                    overlap: float = 0.5,
+                    blinding_x: int = 4,
+                    blinding_y: int = 20,
+                    stacking: str = "avg",
+                    detection_threshold: float = 0.5,
+                    filter_kwargs: Union[None, dict] = None,
+                    reduced_velocity: Union[float, None] = 7000,
+                    distances: Union[list, np.array, None] = None,
+                    reduced_sampling_rate: Union[float, None] = None) -> (np.array, dict):
+    """
+    Predicting a full dataset on a previously loaded model.
+    If the model was trained on reduced traveltime data, it is necessary to set values for
+    'reduced_velocity', 'distances' and 'reduced_sampling_rate'.
 
+    :param data: Array that contains all trace data
+    :param model: Loaded pytorch model for prediction
+    :param metadata: pd.Dataframe that contains metadata for each trace. Only column with sampling_rate might be
+                     required. Note sampling rate is only read once and is assumed to be constant for all traces.
+                     However, if metadata is None (which is default), then sampling_rate has to be set in the
+                     arguments of this function.
+    :param overlap: Overlap between 0 - 1 of neighboring traces
+    :param blinding_x: Set traces at the edges of each chunk of data to np.nan to avoid edge effects.
+    :param blinding_y: Set begin and end of each single trace to np.nan
+    :param stacking: Method how to add up single prediction of overlapping traces either using "max" (maximum)
+                     or "avg" (average). Default is avg
+    :param detection_threshold: Threshold between 0 - 1 to detect phase onset. Default is 0.5
+    :param sampling_rate: Sampling rate in Hz for all traces. Note the sampling rate must be the same for all traces.
+                          Only required if metadata is None
+    :param filter_kwargs: Dictionary for spectral filtering of data. Default is None. For a detailed description
+                          see obspy filter trace
+    :param reduced_velocity: When working with reduced velocity, set the velocity in this case. Note the model
+                             should also be trained with the same reduced velocity value. Default is 7000 m/s.
+    :param distances: List of np.array that contains distances in m of each station to the shot.
+                      Only required when working with reduced velocity model.
+    :param reduced_sampling_rate: Resampling original data to a new sampling rate when working with reduced
+                                  velocity model.
+
+    :return: Numpy array that contains prediction for each trace and detections for each trace.
+             Output shape of  prediction is number of traces times time in samples. Note the time depends on the
+             sampling_rate. Detections is a dictionary whose keys are the trace number in prediction and the
+             items are the predicted first breaks for each single prediction, i.e. when overlapping is applied,
+             each list can have more than one prediction. These single predictions can be used, for example,
+             to compute standard deviation of picks and to sort out picks with high uncertainties.
+    """
     model_shape = (
         model.in_channels,
         *model.input_shape,
@@ -283,15 +318,27 @@ def predict_dataset(
         {}
     )  # key is trace idx and item is list with detections for each single prediction
 
-    # Resample each trace
+    # Check whether reduced traveltime is used
+    use_reduced_traveltime = False
+    if reduced_velocity and distances is not None and reduced_sampling_rate:
+        use_reduced_traveltime = True
+
+    if distances is not None:
+        if len(distances) != data.shape[0]:
+            msg = f"Length of distances ({len(distances)}) and number of traces ({data.shape[0]}) must be equal!"
+            raise ValueError(msg)
+
+    # Set sampling rate for traces either from metadata file or from function arguments
+    cutoff_lst = []
     for idx in tqdm.tqdm(range(data.shape[0])):
-        if not sampling_rate:
+        if not sampling_rate:  # Note, sampling rate is only set once from metadata and is then assumend to be constant
             sampling_rate = metadata.loc[idx, "sampling_rate"]
         if metadata is not None:
             starttime = metadata.loc[idx, "trace_start_time"]
         else:
             starttime = UTCDateTime()
 
+        # Write loaded data into obspy Trace
         trace = obspy.Trace(
             data=data[idx, :],
             header=dict(
@@ -302,14 +349,26 @@ def predict_dataset(
         if filter_kwargs:
             trace.filter(**filter_kwargs)
 
-        # Resampling trace to required sample length, i.e. model_shape[-1]
-        sampling_rate_factor = data.shape[-1] / model_shape[-1]
-        new_sampling_rate = sampling_rate / sampling_rate_factor
+        # Resampling trace to required sample length, i.e. model_shape[-1] or reduced_sampling_rate
+        if use_reduced_traveltime is True:
+            new_sampling_rate = reduced_sampling_rate
+        else:
+            sampling_rate_factor = data.shape[-1] / model_shape[-1]
+            new_sampling_rate = sampling_rate / sampling_rate_factor
         trace.resample(sampling_rate=new_sampling_rate)
 
-        # Write trace to array
-        trace.data -= np.mean(trace.data)
-        resampled_data[idx, :] = trace.data / np.max(np.abs(trace.data))
+        if use_reduced_traveltime:  # Reduce data by traveltime
+            reduced_s = distances[idx] / reduced_velocity
+            cutoff = int(reduced_sampling_rate * reduced_s)
+            trace_data = trace.data[cutoff: int(cutoff + model_shape[-1])]
+            # Convert cutoff with correct reduced sampling rate
+            cutoff_lst.append(cutoff)
+        else:  # Write data from resampled trace
+            trace_data = trace.data
+
+        # Demean and min-max normalize data and write to array for prediction
+        trace_data -= np.mean(trace_data)
+        resampled_data[idx, :] = trace_data / np.max(np.abs(trace_data))
 
     # Reshape resampled data
     resampled_data = np.reshape(
@@ -364,7 +423,7 @@ def predict_dataset(
         )
 
         # Update trace count
-        trace_count[-model_shape[1] :] += 1
+        trace_count[-model_shape[1]:] += 1
 
     # Build average of predicted output
     if stacking == "avg":
@@ -376,6 +435,20 @@ def predict_dataset(
             predicted_output[0, idx, :] = predicted_output[0, idx, :] / np.max(
                 predicted_output[0, idx, :]
             )
+
+    # Append zeros before first-break and ones after first-break when using reduced
+    if use_reduced_traveltime is True:
+        reduced_len = int(data.shape[-1] * reduced_sampling_rate / sampling_rate)
+        reduced_predicted_output = np.zeros(shape=(model_shape[0], data.shape[0], reduced_len))
+        for idx in range(data.shape[0]):
+            # Fill up predicted values to full output array with correct length of original data
+            reduced_predicted_output[0, idx, cutoff_lst[idx]:cutoff_lst[idx] + model_shape[-1]] = predicted_output[0, idx,
+                                                                                              :]
+            # Fill up predicted_output with ones till end
+            reduced_predicted_output[0, idx, cutoff_lst[idx] + model_shape[-1] - blinding_y:] = np.ones(
+                shape=int(reduced_len - (cutoff_lst[idx] + model_shape[-1] - blinding_y)))
+
+        predicted_output = reduced_predicted_output
 
     return predicted_output[0, :], detections
 
@@ -394,8 +467,6 @@ def detect_phases(prediction: np.array, threshold: float = 0.75):
             detections_samp[idx] = indices[0]
         else:
             detections_samp[idx] = np.nan
-
-    # Check whether pick detections are consistent, i.e., if neighbouring picks are close to each other
 
     return detections_samp
 
