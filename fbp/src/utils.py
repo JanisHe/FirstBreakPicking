@@ -302,7 +302,8 @@ def predict_dataset(data: np.array,
 
     :return: Numpy array that contains prediction for each trace and detections for each trace.
              Output shape of  prediction is number of traces times time in samples. Note the time depends on the
-             sampling_rate. Detections is a dictionary whose keys are the trace number in prediction and the
+             sampling_rate, i.e. the original data are resampled to the new sampling rate.
+             Detections is a dictionary whose keys are the trace number in prediction and the
              items are the predicted first breaks for each single prediction, i.e. when overlapping is applied,
              each list can have more than one prediction. These single predictions can be used, for example,
              to compute standard deviation of picks and to sort out picks with high uncertainties.
