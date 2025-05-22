@@ -32,6 +32,8 @@ class FBPDataset(Dataset):
                  norm: str = "peak",
                  overlap: float = 0.5,
                  filter_kwargs: Union[None, dict] = None,
+                 reduced_velocity: Union[None, float] = None,
+                 reduced_sampling_rate: Union[None, float] = None
                  ):
         self.npz_files = npz_files
         self.shape = shape
@@ -41,6 +43,8 @@ class FBPDataset(Dataset):
         self.norm = norm
         self.overlap = overlap
         self.filter_kwargs = filter_kwargs
+        self.reduced_velocity = reduced_velocity
+        self.reduced_sampling_rate = reduced_sampling_rate
 
         # Determine overlap in samples, depending on output shape
         self.overlap_samples = int(shape[-1] * self.overlap)
@@ -76,20 +80,34 @@ class FBPDataset(Dataset):
                 trace = obspy.Trace(data=data[0, idx, :], header=dict(sampling_rate=metadata.loc[idx, "sampling_rate"],
                                                                       starttime=metadata.loc[idx, "trace_start_time"],
                                                                       component="Z"))
+
                 if self.filter_kwargs:
                     trace.filter(**self.filter_kwargs)
 
                 # Resampling trace to required sample length, ie self.shape[-1]
-                sampling_rate_factor = data.shape[-1] / self.shape[-1]
-                new_sampling_rate = metadata.loc[idx, "sampling_rate"] / sampling_rate_factor
-                trace.resample(sampling_rate=new_sampling_rate)
-                new_onset = np.ceil(metadata.loc[idx, self.metadata_key] / sampling_rate_factor)
-                resampled_data[:, idx, :] = trace.data
+                if not self.reduced_velocity:
+                    sampling_rate_factor = data.shape[-1] / self.shape[-1]
+                    new_sampling_rate = metadata.loc[idx, "sampling_rate"] / sampling_rate_factor
+                    trace.resample(sampling_rate=new_sampling_rate)
+                    new_onset = np.ceil(metadata.loc[idx, self.metadata_key] / sampling_rate_factor)
+                    resampled_data[:, idx, :] = trace.data
+                else:  # Cut data when creating training dataset for reduced traveltime
+                    trace.resample(sampling_rate=self.reduced_sampling_rate)
+                    offset_m = metadata.loc[idx, "distance"]
+                    reduced_s = offset_m / self.reduced_velocity
+                    zeros = int(self.reduced_sampling_rate * reduced_s)
+                    reduced_data = trace.data[zeros:int(zeros + self.shape[-1])]  # Reduce travel time
+                    if len(reduced_data) < self.shape[-1]:
+                        reduced_data = np.concatenate([reduced_data, np.zeros(int(self.shape[-1] - len(reduced_data)))])
+                    resampled_data[:, idx, :] = reduced_data
+                    new_onset = np.ceil(
+                        metadata.loc[idx, self.metadata_key] * self.reduced_sampling_rate / metadata.loc[
+                            idx, "sampling_rate"] - zeros)  # Reduce first-break pick
 
                 # Determine SNR of trace at arrival (new_onset)
                 if is_nan(new_onset) == False:
-                    snr = signal_to_noise_ratio(signal=trace.data[int(new_onset): int(new_onset + 50)],
-                                                noise=trace.data[int(new_onset - 100):int(new_onset - 50)],
+                    snr = signal_to_noise_ratio(signal=resampled_data[0, idx, int(new_onset): int(new_onset + 50)],
+                                                noise=resampled_data[0, idx, int(new_onset - 100):int(new_onset - 50)],
                                                 decibel=True)
                 else:
                     snr = np.nan
@@ -97,7 +115,7 @@ class FBPDataset(Dataset):
 
                 # Build target function for each trace
                 target[:, idx, :] = heavyside(onset=new_onset,
-                                              length=trace.stats.npts)
+                                              length=self.shape[-1])
 
             data = resampled_data
             # Cut single chunks from entire data space
