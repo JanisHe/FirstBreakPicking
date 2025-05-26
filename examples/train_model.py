@@ -119,7 +119,8 @@ for epoch in range(epochs):
             print("Validation loss does not decrease further. Early stopping")
             break
 
-        print(f"Epoch {epoch + 1} | train loss: {avg_train_loss[-1]:.5f} | val loss: {avg_valid_loss[-1]:.5f}")
+        print(f"Epoch {epoch + 1} | train loss: {avg_train_loss[-1]:.5f} | val loss: {avg_valid_loss[-1]:.5f}",
+              flush=True)
 
         # Re-open model for next epoch
         model.train()
