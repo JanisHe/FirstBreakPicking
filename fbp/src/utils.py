@@ -145,6 +145,103 @@ class FocalLoss:
         return val
 
 
+class EarlyStopping:
+    """
+    Early stops the training if validation loss doesn't improve after a given patience.
+    https://github.com/Bjarten/early-stopping-pytorch/blob/master/pytorchtools.py
+    """
+    def __init__(self, patience=7,
+                 verbose=False,
+                 delta=0,
+                 path_checkpoint=None,
+                 trace_func=print):
+        """
+        Args:
+            patience (int): How long to wait after last time validation loss improved.
+                            Default: 7
+            verbose (bool): If True, prints a message for each validation loss improvement.
+                            Default: False
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+                            Default: 0
+            path_checkpoint (str, None): Path for the checkpoint to be saved to. If not None chechpoints are saved.
+                            Default: None
+            trace_func (function): trace print function.
+                            Default: print
+        """
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+        self.delta = delta
+        self.path = path_checkpoint
+        self.trace_func = trace_func
+
+    def __call__(self, val_loss, model):
+        score = -val_loss
+
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.verbose:
+                self.trace_func(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+            self.counter = 0
+
+    def save_checkpoint(self, val_loss, model):
+        """
+        Saves model when validation loss decrease.
+        """
+        if self.verbose:
+            self.trace_func(f'\nValidation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f})')
+
+        if self.path:
+            torch.save(model.state_dict(), self.path)
+        self.val_loss_min = val_loss
+
+
+class SaveBestModel:
+    """
+    Class to save the best model while training. If the current epoch's
+    validation loss is less than the previous least less, then save the
+    model state.
+
+    https://debuggercafe.com/saving-and-loading-the-best-model-in-pytorch/
+    """
+
+    def __init__(
+            self,
+            best_valid_loss=float('inf'),
+            model_name: str = "best_model.pth",
+            verbose: bool = False,
+            trace_func=print
+    ):
+        self.best_valid_loss = best_valid_loss
+        self.model_name = model_name
+        self.verbose = verbose
+        self.trace_func = trace_func
+
+    def __call__(
+            self,
+            current_valid_loss,
+            epoch,
+            model
+    ):
+        if current_valid_loss < self.best_valid_loss:
+            self.best_valid_loss = current_valid_loss
+            if self.verbose is True:
+                self.trace_func(f"Saving best model for epoch {epoch + 1} as {self.model_name}")
+            torch.save(obj=model.state_dict,
+                       f=self.model_name)
+
+
 class DataSetTest1OutChannel(Dataset):
     def __init__(self, npz_files: list):
 
