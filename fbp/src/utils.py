@@ -92,7 +92,7 @@ class BCELoss:
         pass
 
     def __call__(self, input, target):
-        return nn.functional.binary_cross_entropy(input=input, target=target)
+        return nn.functional.binary_cross_entropy(input=input, target=target.float())
 
 
 class MeanSquaredError:
