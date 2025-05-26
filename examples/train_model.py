@@ -90,37 +90,41 @@ for epoch in range(epochs):
         # Compute loss for each batch
         train_loss.append(loss.item())
 
-        # Validate model
-        model.eval()
-        with torch.no_grad():
-            for batch in val_dataloader:
-                pred = model(batch[0].to(model.device))
-                valid_loss.append(loss_fn(pred, batch[1].to(model.device)).item())
+    # Validate model for each epoch
+    model.eval()
+    with torch.no_grad():
+        for batch in val_dataloader:
+            pred = model(batch[0].to(model.device))
+            valid_loss.append(loss_fn(pred, batch[1].to(model.device)).item())
 
-        # Determine average training and validation loss
-        avg_train_loss.append(sum(train_loss) / len(train_loss))
-        avg_valid_loss.append(sum(valid_loss) / len(valid_loss))
+    # Determine average training and validation loss
+    avg_train_loss.append(sum(train_loss) / len(train_loss))
+    avg_valid_loss.append(sum(valid_loss) / len(valid_loss))
 
-        # Save model if validation loss decreased
-        best_model(current_valid_loss=avg_valid_loss[-1],
-                   epoch=epoch,
-                   model=model)
+    # Save model if validation loss decreased
+    best_model(current_valid_loss=avg_valid_loss[-1],
+               epoch=epoch,
+               model=model)
 
-        if epoch == 0:  # Save model_args as .json file after finishing of first epoch
-            json_fp = os.path.join(pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json")
-            with open(json_fp, "w") as json_fp:
-                json.dump(model.get_model_args(), json_fp, indent=4)
+    if epoch == 0:  # Save model_args as .json file after finishing of first epoch
+        json_fp = os.path.join(pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json")
+        with open(json_fp, "w") as json_fp:
+            json.dump(model.get_model_args(), json_fp, indent=4)
 
-        # early_stopping needs the validation loss to check if it has decresed,
-        # and if it has, it will make a checkpoint of the current model
-        early_stopping(avg_valid_loss[-1], model)
+    print(f"Epoch {epoch + 1} | train loss: {avg_train_loss[-1]:.5f} | val loss: {avg_valid_loss[-1]:.5f}",
+          flush=True)
 
-        if early_stopping.early_stop:
-            print("Validation loss does not decrease further. Early stopping")
-            break
+    # Re-open model for next epoch
+    model.train()
 
-        print(f"Epoch {epoch + 1} | train loss: {avg_train_loss[-1]:.5f} | val loss: {avg_valid_loss[-1]:.5f}",
-              flush=True)
+    # Clear training and validation loss lists for next epoch
+    train_loss = []
+    valid_loss = []
 
-        # Re-open model for next epoch
-        model.train()
+    # early_stopping needs the validation loss to check if it has decresed,
+    # and if it has, it will make a checkpoint of the current model
+    early_stopping(avg_valid_loss[-1], model)
+
+    if early_stopping.early_stop:
+        print("Validation loss does not decrease further. Early stopping")
+        break
