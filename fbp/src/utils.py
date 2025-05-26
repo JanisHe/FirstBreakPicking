@@ -275,9 +275,9 @@ class FBP2OutChannels(Dataset):
         self.data = []
         for filename in npz_files:
             data = np.load(file=filename)["data"]
-            trace = data[0, :]
-            probs = data[1, :]
-            noises = 1 - probs
+            trace = data[0, :] - np.mean(data[0, :])  # Normalized seismic data
+            probs = data[1, :]  # First break probabilites
+            noises = 1 - probs  # Second output channel
             out = np.empty(shape=(2, *probs.shape[1:]))
             out[0, :] = probs
             out[1, :] = noises
