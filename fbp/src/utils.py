@@ -87,6 +87,14 @@ class CrossEntropyLoss:
         return nn.functional.cross_entropy(input=input, target=target)
 
 
+class BCELoss:
+    def __init__(self):
+        pass
+
+    def __call__(self, input, target):
+        return nn.functional.binary_cross_entropy(input=input, target=target)
+
+
 class MeanSquaredError:
     def __init__(self):
         pass
