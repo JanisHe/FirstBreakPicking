@@ -95,6 +95,21 @@ class BCELoss:
         return nn.functional.binary_cross_entropy(input=input, target=target.float())
 
 
+class DiceLoss:
+    """
+    https://medium.com/data-scientists-diary/implementation-of-dice-loss-vision-pytorch-7eef1e438f68
+    """
+    def __init__(self, smooth=1):
+        self.smooth = smooth
+
+    def __call__(self, pred, target):
+        pred = torch.sigmoid(pred)
+        intersection = (pred * target).sum(dim=(2, 3))
+        union = pred.sum(dim=(2, 3)) + target.sum(dim=(2, 3))
+        dice = (2. * intersection + self.smooth) / (union + self.smooth)
+        return 1 - dice.mean()
+
+
 class MeanSquaredError:
     def __init__(self):
         pass
