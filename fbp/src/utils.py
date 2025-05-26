@@ -238,7 +238,7 @@ class SaveBestModel:
             self.best_valid_loss = current_valid_loss
             if self.verbose is True:
                 self.trace_func(f"Saving best model for epoch {epoch + 1} as {self.model_name}")
-            torch.save(obj=model.state_dict,
+            torch.save(obj=model.state_dict(),
                        f=self.model_name)
 
 
