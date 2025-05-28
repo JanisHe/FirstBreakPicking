@@ -574,11 +574,14 @@ def predict_dataset(data: np.array,
     return predicted_output[0, :], detections
 
 
-def detect_phases(prediction: np.array, threshold: float = 0.75):
+def detect_phases(prediction: np.array,
+                  threshold: float = 0.75,
+                  blinding_x: int = 4):
     """
 
     :param prediction:
     :param threshold:
+    :param blinding_x:
     :return:
     """
     detections_samp = np.empty(prediction.shape[0])
@@ -588,6 +591,11 @@ def detect_phases(prediction: np.array, threshold: float = 0.75):
             detections_samp[idx] = indices[0]
         else:
             detections_samp[idx] = np.nan
+
+    # Set picks at edges to np.nan if blinding_x is set
+    if blinding_x > 0:
+        detections_samp[:blinding_x] = np.nan
+        detections_samp[-blinding_x:] = np.nan
 
     return detections_samp
 
