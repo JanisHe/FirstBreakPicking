@@ -451,7 +451,8 @@ def predict_dataset(data: np.array,
 
     # Set sampling rate for traces either from metadata file or from function arguments
     cutoff_lst = []
-    for idx in tqdm.tqdm(range(data.shape[0])):
+    # for idx in tqdm.tqdm(range(data.shape[0])):
+    for idx in range(data.shape[0]):
         if not sampling_rate:  # Note, sampling rate is only set once from metadata and is then assumend to be constant
             sampling_rate = metadata.loc[idx, "sampling_rate"]
         if metadata is not None:
