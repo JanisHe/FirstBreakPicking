@@ -8,7 +8,6 @@ import seisbench.models as sbm  # noqa
 import torch
 import torch.nn as nn
 import torchvision
-import tqdm
 from obspy import UTCDateTime
 from scipy import signal
 from torch.utils.data import Dataset
@@ -99,6 +98,7 @@ class DiceLoss:
     """
     https://medium.com/data-scientists-diary/implementation-of-dice-loss-vision-pytorch-7eef1e438f68
     """
+
     def __init__(self, smooth=1):
         self.smooth = smooth
 
@@ -106,7 +106,7 @@ class DiceLoss:
         pred = torch.sigmoid(pred)
         intersection = (pred * target).sum(dim=(2, 3))
         union = pred.sum(dim=(2, 3)) + target.sum(dim=(2, 3))
-        dice = (2. * intersection + self.smooth) / (union + self.smooth)
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
         return 1 - dice.mean()
 
 
@@ -150,11 +150,10 @@ class EarlyStopping:
     Early stops the training if validation loss doesn't improve after a given patience.
     https://github.com/Bjarten/early-stopping-pytorch/blob/master/pytorchtools.py
     """
-    def __init__(self, patience=7,
-                 verbose=False,
-                 delta=0,
-                 path_checkpoint=None,
-                 trace_func=print):
+
+    def __init__(
+        self, patience=7, verbose=False, delta=0, path_checkpoint=None, trace_func=print
+    ):
         """
         Args:
             patience (int): How long to wait after last time validation loss improved.
@@ -187,7 +186,9 @@ class EarlyStopping:
         elif score < self.best_score + self.delta:
             self.counter += 1
             if self.verbose:
-                self.trace_func(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+                self.trace_func(
+                    f"EarlyStopping counter: {self.counter} out of {self.patience}"
+                )
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -200,7 +201,9 @@ class EarlyStopping:
         Saves model when validation loss decrease.
         """
         if self.verbose:
-            self.trace_func(f'\nValidation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f})')
+            self.trace_func(
+                f"\nValidation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f})"
+            )
 
         if self.path:
             torch.save(model.state_dict(), self.path)
@@ -217,34 +220,29 @@ class SaveBestModel:
     """
 
     def __init__(
-            self,
-            best_valid_loss=float('inf'),
-            model_name: str = "best_model.pth",
-            verbose: bool = False,
-            trace_func=print
+        self,
+        best_valid_loss=float("inf"),
+        model_name: str = "best_model.pth",
+        verbose: bool = False,
+        trace_func=print,
     ):
         self.best_valid_loss = best_valid_loss
         self.model_name = model_name
         self.verbose = verbose
         self.trace_func = trace_func
 
-    def __call__(
-            self,
-            current_valid_loss,
-            epoch,
-            model
-    ):
+    def __call__(self, current_valid_loss, epoch, model):
         if current_valid_loss < self.best_valid_loss:
             self.best_valid_loss = current_valid_loss
             if self.verbose is True:
-                self.trace_func(f"Saving best model for epoch {epoch + 1} as {self.model_name}")
-            torch.save(obj=model.state_dict(),
-                       f=self.model_name)
+                self.trace_func(
+                    f"Saving best model for epoch {epoch + 1} as {self.model_name}"
+                )
+            torch.save(obj=model.state_dict(), f=self.model_name)
 
 
 class DataSetTest1OutChannel(Dataset):
     def __init__(self, npz_files: list):
-
         self.data = []
         for filename in npz_files:
             data = np.load(file=filename)["data"]
@@ -379,19 +377,21 @@ def model_prediction(
     return predicted_output
 
 
-def predict_dataset(data: np.array,
-                    model,
-                    metadata: Union[pd.DataFrame, None] = None,
-                    sampling_rate: Union[None, float] = None,
-                    overlap: float = 0.5,
-                    blinding_x: int = 4,
-                    blinding_y: int = 20,
-                    stacking: str = "avg",
-                    detection_threshold: float = 0.5,
-                    filter_kwargs: Union[None, dict] = None,
-                    reduced_velocity: Union[float, None] = 7000,
-                    distances: Union[list, np.array, None] = None,
-                    reduced_sampling_rate: Union[float, None] = None) -> (np.array, dict):
+def predict_dataset(
+    data: np.array,
+    model,
+    metadata: Union[pd.DataFrame, None] = None,
+    sampling_rate: Union[None, float] = None,
+    overlap: float = 0.5,
+    blinding_x: int = 4,
+    blinding_y: int = 20,
+    stacking: str = "avg",
+    detection_threshold: float = 0.5,
+    filter_kwargs: Union[None, dict] = None,
+    reduced_velocity: Union[float, None] = 7000,
+    distances: Union[list, np.array, None] = None,
+    reduced_sampling_rate: Union[float, None] = None,
+) -> (np.array, dict):
     """
     Predicting a full dataset on a previously loaded model.
     If the model was trained on reduced traveltime data, it is necessary to set values for
@@ -435,9 +435,7 @@ def predict_dataset(data: np.array,
     resampled_data = np.empty(
         shape=(data.shape[0], model_shape[-1])
     )  # Shape num. of traces times resampled length of each trace
-    detections = (
-        {}
-    )  # key is trace idx and item is list with detections for each single prediction
+    detections = {}  # key is trace idx and item is list with detections for each single prediction
 
     # Check whether reduced traveltime is used
     use_reduced_traveltime = False
@@ -482,7 +480,7 @@ def predict_dataset(data: np.array,
         if use_reduced_traveltime:  # Reduce data by traveltime
             reduced_s = distances[idx] / reduced_velocity
             cutoff = int(reduced_sampling_rate * reduced_s)
-            trace_data = trace.data[cutoff: int(cutoff + model_shape[-1])]
+            trace_data = trace.data[cutoff : int(cutoff + model_shape[-1])]
             # Convert cutoff with correct reduced sampling rate
             cutoff_lst.append(cutoff)
         else:  # Write data from resampled trace
@@ -545,7 +543,7 @@ def predict_dataset(data: np.array,
         )
 
         # Update trace count
-        trace_count[-model_shape[1]:] += 1
+        trace_count[-model_shape[1] :] += 1
 
     # Build average of predicted output
     if stacking == "avg":
@@ -561,23 +559,29 @@ def predict_dataset(data: np.array,
     # Append zeros before first-break and ones after first-break when using reduced
     if use_reduced_traveltime is True:
         reduced_len = int(data.shape[-1] * reduced_sampling_rate / sampling_rate)
-        reduced_predicted_output = np.zeros(shape=(model_shape[0], data.shape[0], reduced_len))
+        reduced_predicted_output = np.zeros(
+            shape=(model_shape[0], data.shape[0], reduced_len)
+        )
         for idx in range(data.shape[0]):
             # Fill up predicted values to full output array with correct length of original data
-            reduced_predicted_output[0, idx, cutoff_lst[idx]:cutoff_lst[idx] + model_shape[-1]] = predicted_output[0, idx,
-                                                                                              :]
+            reduced_predicted_output[
+                0, idx, cutoff_lst[idx] : cutoff_lst[idx] + model_shape[-1]
+            ] = predicted_output[0, idx, :]
             # Fill up predicted_output with ones till end
-            reduced_predicted_output[0, idx, cutoff_lst[idx] + model_shape[-1] - blinding_y:] = np.ones(
-                shape=int(reduced_len - (cutoff_lst[idx] + model_shape[-1] - blinding_y)))
+            reduced_predicted_output[
+                0, idx, cutoff_lst[idx] + model_shape[-1] - blinding_y :
+            ] = np.ones(
+                shape=int(
+                    reduced_len - (cutoff_lst[idx] + model_shape[-1] - blinding_y)
+                )
+            )
 
         predicted_output = reduced_predicted_output
 
     return predicted_output[0, :], detections
 
 
-def detect_phases(prediction: np.array,
-                  threshold: float = 0.75,
-                  blinding_x: int = 4):
+def detect_phases(prediction: np.array, threshold: float = 0.75, blinding_x: int = 4):
     """
 
     :param prediction:
@@ -741,7 +745,6 @@ def add_noise(dataset: np.array, scale: tuple[float, float] = (0, 1)):
 
 
 def residual_histogram(residuals, axes, bins=60, xlim=(-100, 100)):
-
     counts, bins = np.histogram(residuals, bins=bins, range=xlim)
     axes.hist(bins[:-1], bins, weights=counts, edgecolor="b")
 

@@ -1,4 +1,5 @@
 import os
+
 import obspy
 
 import numpy as np
@@ -23,18 +24,20 @@ class FBPDataset(Dataset):
     :param overlap:
     :param filter_kwargs:
     """
-    def __init__(self,
-                 npz_files: list,
-                 metadata_path: str,
-                 shape: tuple = (1, 32, 2048),
-                 npz_data_key: str = "data",
-                 metadata_key: str = "trace_P_arrival_sample",
-                 norm: str = "peak",
-                 overlap: float = 0.5,
-                 filter_kwargs: Union[None, dict] = None,
-                 reduced_velocity: Union[None, float] = None,
-                 reduced_sampling_rate: Union[None, float] = None
-                 ):
+
+    def __init__(
+        self,
+        npz_files: list,
+        metadata_path: str,
+        shape: tuple = (1, 32, 2048),
+        npz_data_key: str = "data",
+        metadata_key: str = "trace_P_arrival_sample",
+        norm: str = "peak",
+        overlap: float = 0.5,
+        filter_kwargs: Union[None, dict] = None,
+        reduced_velocity: Union[None, float] = None,
+        reduced_sampling_rate: Union[None, float] = None,
+    ):
         self.npz_files = npz_files
         self.shape = shape
         self.metadata_path = metadata_path
@@ -60,64 +63,117 @@ class FBPDataset(Dataset):
         self.snr_chunk = []  # Storing SNR for each single chunk
         self.snr_list = []
         for filename in self.npz_files:
+            self.phase_onset = []
             data = np.load(file=filename)[self.npz_data_key]
 
             # Read metadata
-            metadata = pd.read_csv(os.path.join(self.metadata_path,
-                                                f"metadata{Path(filename).stem}.csv")
-                                   )
+            metadata = pd.read_csv(
+                os.path.join(self.metadata_path, f"metadata{Path(filename).stem}.csv")
+            )
 
             # Reshape data to number of channels
-            data = np.reshape(a=data,
-                              newshape=(self.shape[0], *data.shape))
+            data = np.reshape(a=data, newshape=(self.shape[0], *data.shape))
 
-            resampled_data = np.empty(shape=(self.shape[0], data.shape[1], self.shape[-1]))
+            resampled_data = np.empty(
+                shape=(self.shape[0], data.shape[1], self.shape[-1])
+            )
 
             # Create target output for each trace
             target = np.empty(shape=(self.shape[0], data.shape[1], self.shape[-1]))
             for idx in range(data.shape[1]):
                 # Convert data to obspy Trace
-                trace = obspy.Trace(data=data[0, idx, :], header=dict(sampling_rate=metadata.loc[idx, "sampling_rate"],
-                                                                      starttime=metadata.loc[idx, "trace_start_time"],
-                                                                      component="Z"))
-
-                if self.filter_kwargs:
-                    trace.filter(**self.filter_kwargs)
+                trace = obspy.Trace(
+                    data=data[0, idx, :],
+                    header=dict(
+                        sampling_rate=metadata.loc[idx, "sampling_rate"],
+                        starttime=metadata.loc[idx, "trace_start_time"],
+                        component="Z",
+                    ),
+                )
 
                 # Resampling trace to required sample length, ie self.shape[-1]
                 if not self.reduced_velocity:
                     sampling_rate_factor = data.shape[-1] / self.shape[-1]
-                    new_sampling_rate = metadata.loc[idx, "sampling_rate"] / sampling_rate_factor
+                    new_sampling_rate = (
+                        metadata.loc[idx, "sampling_rate"] / sampling_rate_factor
+                    )
                     trace.resample(sampling_rate=new_sampling_rate)
-                    new_onset = np.ceil(metadata.loc[idx, self.metadata_key] / sampling_rate_factor)
+                    new_onset = np.ceil(
+                        metadata.loc[idx, self.metadata_key] / sampling_rate_factor
+                    )
                     resampled_data[:, idx, :] = trace.data
                 else:  # Cut data when creating training dataset for reduced traveltime
                     trace.resample(sampling_rate=self.reduced_sampling_rate)
                     offset_m = metadata.loc[idx, "distance"]
                     reduced_s = offset_m / self.reduced_velocity
                     zeros = int(self.reduced_sampling_rate * reduced_s)
-                    reduced_data = trace.data[zeros:int(zeros + self.shape[-1])]  # Reduce travel time
+                    reduced_data = trace.data[
+                        zeros : int(zeros + self.shape[-1])
+                    ]  # Reduce travel time
                     if len(reduced_data) < self.shape[-1]:
-                        reduced_data = np.concatenate([reduced_data, np.zeros(int(self.shape[-1] - len(reduced_data)))])
+                        reduced_data = np.concatenate(
+                            [
+                                reduced_data,
+                                np.zeros(int(self.shape[-1] - len(reduced_data))),
+                            ]
+                        )
                     resampled_data[:, idx, :] = reduced_data
                     new_onset = np.ceil(
-                        metadata.loc[idx, self.metadata_key] * self.reduced_sampling_rate / metadata.loc[
-                            idx, "sampling_rate"] - zeros)  # Reduce first-break pick
+                        metadata.loc[idx, self.metadata_key]
+                        * self.reduced_sampling_rate
+                        / metadata.loc[idx, "sampling_rate"]
+                        - zeros
+                    )  # Reduce first-break pick
+
+                if self.filter_kwargs:
+                    trace.filter(**self.filter_kwargs)
 
                 # Determine SNR of trace at arrival (new_onset)
                 if is_nan(new_onset) == False:
-                    snr = signal_to_noise_ratio(signal=resampled_data[0, idx, int(new_onset): int(new_onset + 50)],
-                                                noise=resampled_data[0, idx, int(new_onset - 100):int(new_onset - 50)],
-                                                decibel=True)
+                    snr = signal_to_noise_ratio(
+                        signal=resampled_data[
+                            0, idx, int(new_onset) : int(new_onset + 50)
+                        ],
+                        noise=resampled_data[
+                            0, idx, int(new_onset - 100) : int(new_onset - 50)
+                        ],
+                        decibel=True,
+                    )
                 else:
                     snr = np.nan
+
+                self.phase_onset.append(new_onset)
                 self.snr_list.append(snr)
 
                 # Build target function for each trace
-                target[:, idx, :] = heavyside(onset=new_onset,
-                                              length=self.shape[-1])
+                target[:, idx, :] = heavyside(onset=new_onset, length=self.shape[-1])
 
             data = resampled_data
+
+            import matplotlib.pyplot as plt
+
+            print(filename)
+            fig = plt.figure(figsize=(6, 6))
+            for l in range(data.shape[1]):
+                if self.reduced_velocity:
+                    sr = self.reduced_sampling_rate
+                else:
+                    sr = new_sampling_rate
+                time = np.arange(2048) / sr
+                d = data[0, l, :] / np.max(np.abs(data[0, l, :]))
+                plt.plot(d * 3 + l, time, color="k", linewidth=0.2)
+                if is_nan(self.phase_onset[l]) == False:
+                    plt.plot(
+                        [l - 0.5, l + 0.5],
+                        np.array([self.phase_onset[l], self.phase_onset[l]]) / sr,
+                        color="tab:orange",
+                    )
+            plt.ylim(0, max(time))
+            plt.xlim(0, data.shape[1])
+            plt.xlabel("Traces")
+            plt.ylabel("Traveltime (s)")
+            plt.show()
+
             # Cut single chunks from entire data space
             # Loop over number of traces (outer loop)
             idx_start_out = 0
@@ -129,8 +185,12 @@ class FBPDataset(Dataset):
                 idx_end_inner = self.shape[-1]
                 step_inner = int(self.shape[-1] * self.overlap)
                 while idx_end_inner <= data.shape[-1]:
-                    split_data = data[:, idx_start_out:idx_end_out, idx_start_inner:idx_end_inner]
-                    split_target = target[:, idx_start_out:idx_end_out, idx_start_inner:idx_end_inner]
+                    split_data = data[
+                        :, idx_start_out:idx_end_out, idx_start_inner:idx_end_inner
+                    ]
+                    split_target = target[
+                        :, idx_start_out:idx_end_out, idx_start_inner:idx_end_inner
+                    ]
 
                     # Convert all data to
                     split_data = split_data.astype(np.float32)
@@ -143,14 +203,15 @@ class FBPDataset(Dataset):
                     if self.norm == "peak":
                         split_data = split_data / np.max(np.abs(split_data))
                     elif self.norm == "std":
-                        split_data = (split_data - np.mean(split_data)) / np.std(split_data)
+                        split_data = (split_data - np.mean(split_data)) / np.std(
+                            split_data
+                        )
 
                     # Get sub snr list
                     self.snr_chunk.append(self.snr_list[idx_start_out:idx_end_out])
 
                     # Append data and target to self.data
-                    self.data.append((split_data,
-                                      split_target))
+                    self.data.append((split_data, split_target))
 
                     # Update inner indices
                     idx_start_inner += step_inner

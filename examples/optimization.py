@@ -10,7 +10,7 @@ import torch
 import time
 import logging
 import random
-import seisbench # noqa
+import seisbench  # noqa
 import socket
 import pathlib
 
@@ -22,12 +22,22 @@ from mpi4py import MPI
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
-from propulate import Propulator, Islands
+from propulate import Islands
 from propulate.utils import get_default_propagator, set_logger_config
 from typing import Union
 
-from fbp.src.utils import (FBP2OutChannels, EarlyStopping, SaveBestModel, predict_dataset, detect_phases, is_nan,
-                           MeanSquaredError, BCELoss, DiceLoss, FocalLoss)
+from fbp.src.utils import (
+    FBP2OutChannels,
+    EarlyStopping,
+    SaveBestModel,
+    predict_dataset,
+    detect_phases,
+    is_nan,
+    MeanSquaredError,
+    BCELoss,
+    DiceLoss,
+    FocalLoss,
+)
 from fbp.src.unet import UNet
 
 
@@ -36,9 +46,9 @@ SUBGROUP_COMM_METHOD = "nccl-slurm"
 GPUS_PER_NODE = 4
 
 
-def torch_process_group_init_propulate(subgroup_comm: MPI.Comm,
-                                       method: str,
-                                       trace_func=print) -> None:
+def torch_process_group_init_propulate(
+    subgroup_comm: MPI.Comm, method: str, trace_func=print
+) -> None:
     """
     Create the torch process group of each multi-rank worker from a subgroup of the MPI world.
 
@@ -142,40 +152,35 @@ def torch_process_group_init_propulate(subgroup_comm: MPI.Comm,
     )
 
 
-def get_data_loaders(train_files: list,
-                     val_files: list,
-                     batch_size: int
-                     ):
-
+def get_data_loaders(train_files: list, val_files: list, batch_size: int):
     # Create loader for training and validation
     train_dataset = FBP2OutChannels(npz_files=train_files)
     val_dataset = FBP2OutChannels(npz_files=val_files)
 
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size=batch_size,
-                                  shuffle=True,
-                                  pin_memory=True,
-                                  persistent_workers=True,
-                                  num_workers=6)
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        pin_memory=True,
+        persistent_workers=True,
+        num_workers=6,
+    )
 
-    val_dataloader = DataLoader(val_dataset,
-                                batch_size=batch_size,
-                                shuffle=False,
-                                pin_memory=True,
-                                persistent_workers=True,
-                                num_workers=6)
+    val_dataloader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        pin_memory=True,
+        persistent_workers=True,
+        num_workers=6,
+    )
 
     return train_dataloader, val_dataloader
 
 
-def trainer(epochs: int,
-            train_dataloader,
-            val_dataloader,
-            model,
-            loss_fn,
-            optimizer,
-            model_name):
-
+def trainer(
+    epochs: int, train_dataloader, val_dataloader, model, loss_fn, optimizer, model_name
+):
     early_stopping = EarlyStopping(patience=20, verbose=False, path_checkpoint=None)
     best_model = SaveBestModel(model_name=model_name)
 
@@ -213,12 +218,12 @@ def trainer(epochs: int,
         avg_valid_loss.append(sum(valid_loss) / len(valid_loss))
 
         # Save model if validation loss decreased
-        best_model(current_valid_loss=avg_valid_loss[-1],
-                   epoch=epoch,
-                   model=model)
+        best_model(current_valid_loss=avg_valid_loss[-1], epoch=epoch, model=model)
 
         if epoch == 0:  # Save model_args as .json file after finishing of first epoch
-            json_fp = os.path.join(pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json")
+            json_fp = os.path.join(
+                pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json"
+            )
             with open(json_fp, "w") as json_fp:
                 json.dump(model.get_model_args(), json_fp, indent=4)
 
@@ -243,13 +248,17 @@ def trainer(epochs: int,
     return
 
 
-def model_tester(model_name: str,
-                 metadata_path: str,
-                 test_files: list,
-                 reduced_traveltime: bool,
-                 residual: float = 0.5):
+def model_tester(
+    model_name: str,
+    metadata_path: str,
+    test_files: list,
+    reduced_traveltime: bool,
+    residual: float = 0.5,
+):
     # Define model (must match with trained model) by loading json file
-    json_fp = os.path.join(pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json")
+    json_fp = os.path.join(
+        pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json"
+    )
     with open(json_fp, "r") as f_json:
         model_args = json.load(f_json)
 
@@ -275,36 +284,41 @@ def model_tester(model_name: str,
     # Loop over each testfile and predict phase onsets
     for filename in test_files:
         data = np.load(filename)["data"]
-        metadata = pd.read_csv(os.path.join(metadata_path, f"metadata{pathlib.Path(filename).stem}.csv"))
-        prediction, detections = predict_dataset(data=data,
-                                                 model=model,
-                                                 metadata=metadata,
-                                                 overlap=0.95,
-                                                 blinding_x=6,
-                                                 stacking="avg",
-                                                 reduced_velocity=reduced_velocity,
-                                                 distances=metadata["distance"],
-                                                 reduced_sampling_rate=reduced_sampling_rate,
-                                                 filter_kwargs=dict(type="bandpass",
-                                                                    freqmin=2.5,
-                                                                    freqmax=16))
+        metadata = pd.read_csv(
+            os.path.join(metadata_path, f"metadata{pathlib.Path(filename).stem}.csv")
+        )
+        prediction, detections = predict_dataset(
+            data=data,
+            model=model,
+            metadata=metadata,
+            overlap=0.95,
+            blinding_x=6,
+            stacking="avg",
+            reduced_velocity=reduced_velocity,
+            distances=metadata["distance"],
+            reduced_sampling_rate=reduced_sampling_rate,
+            filter_kwargs=dict(type="bandpass", freqmin=2.5, freqmax=16),
+        )
 
         # Apply gaussian filter to smooth edges
         prediction = gaussian_filter(prediction, sigma=10)
 
         # Detect first break picks on predicted output, i.e. prediction
         # Note, detections from predict_dataset are detections on each predicted trace, i.e. with no overlap
-        detections_single = detect_phases(prediction=prediction,
-                                          threshold=0.5)
+        detections_single = detect_phases(prediction=prediction, threshold=0.5)
 
         # Loop over each single trace
         for l in range(data.shape[0]):
-            p_arrival_seconds = metadata.loc[l, "trace_P_arrival_sample"] / metadata.loc[l, "sampling_rate"]
+            p_arrival_seconds = (
+                metadata.loc[l, "trace_P_arrival_sample"]
+                / metadata.loc[l, "sampling_rate"]
+            )
             if is_nan(p_arrival_seconds) == False:
                 true_picks.append(p_arrival_seconds)
 
             detections_seconds = detections_single[l] / (
-                    metadata.loc[l, "sampling_rate"] * prediction.shape[1] / data.shape[1])
+                metadata.loc[l, "sampling_rate"] * prediction.shape[1] / data.shape[1]
+            )
             if np.std(detections[l]) <= 5:
                 # Compute metrics
                 if np.abs(detections_seconds - p_arrival_seconds) <= residual:
@@ -340,26 +354,34 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
     elif params["attention"] == "False":
         attention = False
 
-    model = UNet(depth=params["depth"],
-                 #kernel_size=params["kernel_size"],
-                 #stride=params["stride"],
-                 kernel_size=(3, 7),
-                 stride=(3, 3),
-                 skip_connections=skip_connections,
-                 out_channels=2,
-                 filters_root=params["filters_root"],
-                 output_activation=torch.nn.Softmax(dim=1),
-                 drop_rate=params["drop_rate"],
-                 attention=attention)
+    model = UNet(
+        depth=params["depth"],
+        # kernel_size=params["kernel_size"],
+        # stride=params["stride"],
+        kernel_size=(3, 7),
+        stride=(3, 3),
+        skip_connections=skip_connections,
+        out_channels=2,
+        filters_root=params["filters_root"],
+        output_activation=torch.nn.Softmax(dim=1),
+        drop_rate=params["drop_rate"],
+        attention=attention,
+    )
 
     if params["noise_files"] == "True":
-        train_files = glob.glob("/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_reduced_v1/*")
-        noisy_files = glob.glob("/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_reduced_noise_v1/*")
+        train_files = glob.glob(
+            "/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_reduced_v1/*"
+        )
+        noisy_files = glob.glob(
+            "/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_reduced_noise_v1/*"
+        )
     else:
-        train_files = glob.glob("/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_reduced_v1/*")
+        train_files = glob.glob(
+            "/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_reduced_v1/*"
+        )
 
     split = int(len(train_files) * 0.8)  # XXX Hard coded validation split of 0.8
-    train_files, val_files =  train_files[:split], train_files[split:]
+    train_files, val_files = train_files[:split], train_files[split:]
 
     # Append noisy files
     if params["noise_files"] is True:
@@ -368,9 +390,9 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
         val_files += noisy_files[split:]
 
     # Get dataloaders
-    train_loader, validation_loader = get_data_loaders(train_files,
-                                                       val_files,
-                                                       params["batch_size"])
+    train_loader, validation_loader = get_data_loaders(
+        train_files, val_files, params["batch_size"]
+    )
 
     # Move model to GPU if GPU is available
     if torch.cuda.is_available():
@@ -392,24 +414,30 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
         loss_fn = BCELoss()
 
     # specify learning rate and optimizer
-    optimizer = torch.optim.Adam(model.parameters(),
-                                 lr=params["learning_rate"])
+    optimizer = torch.optim.Adam(model.parameters(), lr=params["learning_rate"])
 
     # Modify model name for a temporary name to save best model and json file
-    model_path, model_name = pathlib.Path(params["model_name"]).parent, pathlib.Path(params["model_name"]).stem
+    model_path, model_name = (
+        pathlib.Path(params["model_name"]).parent,
+        pathlib.Path(params["model_name"]).stem,
+    )
     random_name = int(time.time()) + random.randint(0, int(time.time()))
     model_name_tmp = os.path.join(model_path, f"{model_name}_{random_name}.pt")
-    json_tmp = os.path.join(pathlib.Path(model_name_tmp).parent, f"{pathlib.Path(model_name_tmp).stem}.json")
+    json_tmp = os.path.join(
+        pathlib.Path(model_name_tmp).parent, f"{pathlib.Path(model_name_tmp).stem}.json"
+    )
 
     # Train model
     try:  # RuntimeError is raised when model does not work with given parameters
-        trainer(epochs=params["epochs"],
-                train_dataloader=train_loader,
-                val_dataloader=validation_loader,
-                model=model,
-                loss_fn=loss_fn,
-                optimizer=optimizer,
-                model_name=model_name_tmp)
+        trainer(
+            epochs=params["epochs"],
+            train_dataloader=train_loader,
+            val_dataloader=validation_loader,
+            model=model,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            model_name=model_name_tmp,
+        )
     except RuntimeError:
         return 1000
 
@@ -419,14 +447,18 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
     elif params["reduced_traveltime"] == "True":
         reduced_traveltime = True
 
-    tpr = model_tester(model_name=model_name_tmp,
-                       metadata_path=params["metadata"],
-                       test_files=glob.glob(params["test_files"]),
-                       reduced_traveltime=reduced_traveltime)
+    tpr = model_tester(
+        model_name=model_name_tmp,
+        metadata_path=params["metadata"],
+        test_files=glob.glob(params["test_files"]),
+        reduced_traveltime=reduced_traveltime,
+    )
 
     # Rename json and model wrt to true positive rate (TPR)
     tpr_model_name = os.path.join(model_path, f"{model_name}_{tpr}.pt")
-    tpr_json = os.path.join(pathlib.Path(tpr_model_name).parent, f"{pathlib.Path(tpr_model_name).stem}.json")
+    tpr_json = os.path.join(
+        pathlib.Path(tpr_model_name).parent, f"{pathlib.Path(tpr_model_name).stem}.json"
+    )
     os.rename(src=model_name_tmp, dst=tpr_model_name)
     os.rename(src=json_tmp, dst=tpr_json)
 
@@ -470,33 +502,36 @@ if __name__ == "__main__":
     pollination = True
     ranks_per_worker = 1
 
-    params = {"depth": (2, 6),
-              "skip_connections": ("True", "False"),
-              #"kernel_size": ((3, 7), (3, 7)),
-              #"strid": ((3, 3), (3, 3)),
-              "filters_root": (2, 4, 8, 16),
-              "drop_rate": (0.0, 0.5),
-              "attention": ("True", "False"),
-              "noise_files": ("True", "False"),
-              "test_files": ("/scratch/gpi/seis/jheuel/FirstBreakPicking/test_files_v1/*"),
-              "batch_size": (16, 32, 64, 128, 256),
-              "loss_fn": ("MeanSquaredError", "DiceLoss", "FocalLoss", "BCELoss"),
-              "learning_rate": (0.001, 0.01, 0.1),
-              "model_name": (os.path.join(checkpoint_path, "deep_fb_propulate.pt")),
-              "epochs": (500),
-              "metadata": ("/scratch/gpi/seis/jheuel/FirstBreakPicking/metadata_v1"),
-              "reduced_traveltime": ("True", "False")
-              }
+    params = {
+        "depth": (2, 6),
+        "skip_connections": ("True", "False"),
+        # "kernel_size": ((3, 7), (3, 7)),
+        # "strid": ((3, 3), (3, 3)),
+        "filters_root": (2, 4, 8, 16),
+        "drop_rate": (0.0, 0.5),
+        "attention": ("True", "False"),
+        "noise_files": ("True", "False"),
+        "test_files": ("/scratch/gpi/seis/jheuel/FirstBreakPicking/test_files_v1/*"),
+        "batch_size": (16, 32, 64, 128, 256),
+        "loss_fn": ("MeanSquaredError", "DiceLoss", "FocalLoss", "BCELoss"),
+        "learning_rate": (0.001, 0.01, 0.1),
+        "model_name": (os.path.join(checkpoint_path, "deep_fb_propulate.pt")),
+        "epochs": (500),
+        "metadata": ("/scratch/gpi/seis/jheuel/FirstBreakPicking/metadata_v1"),
+        "reduced_traveltime": ("True", "False"),
+    }
 
     # Check limits for propulate
     limits_dict = check_propulate_limits(params=params)
 
-    rng = random.Random(comm.rank)  # Set up separate random number generator for evolutionary optimizer.
+    rng = random.Random(
+        comm.rank
+    )  # Set up separate random number generator for evolutionary optimizer.
 
     # Set up separate logger for Propulate optimization.
     set_logger_config(
         level=logging.INFO,  # Logging level
-        log_file=f"logs/deep_fb_propulate.log",  # Logging path
+        log_file="logs/deep_fb_propulate.log",  # Logging path
         log_to_stdout=True,  # Print log on stdout.
         log_rank=False,  # Do not prepend MPI rank to logging messages.
         colors=True,  # Use colors.
@@ -542,7 +577,7 @@ if __name__ == "__main__":
         pollination=pollination,  # Whether to use pollination or migration
         checkpoint_path=checkpoint_path,  # Checkpoint path
         # ----- SPECIFIC FOR MULTI-RANK UCS -----
-        ranks_per_worker=ranks_per_worker  # GPUS_PER_NODE,  # Number of ranks per (multi rank) worker
+        ranks_per_worker=ranks_per_worker,  # GPUS_PER_NODE,  # Number of ranks per (multi rank) worker
     )
 
     # Run actual optimization.

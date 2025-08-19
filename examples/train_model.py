@@ -7,7 +7,7 @@ import pathlib
 from torch.utils.data import DataLoader
 from torchsummary import summary
 
-from fbp.src.utils import FBP2OutChannels, MeanSquaredError, BCELoss, DiceLoss, EarlyStopping, SaveBestModel
+from fbp.src.utils import FBP2OutChannels, DiceLoss, EarlyStopping, SaveBestModel
 from fbp.src.unet import UNet
 
 
@@ -15,15 +15,21 @@ epochs = 250  # Number of epochs for training
 batch_size = 32
 learning_rate = 0.001
 shape = (1, 32, 2048)  # num_channels, width (num traces), height (trace length)
-validation_split = 0.8 # Split for training and validation data
-early_stopping = EarlyStopping(patience=20, verbose=False, path_checkpoint=None)  # Initialize early stopping class
+validation_split = 0.8  # Split for training and validation data
+early_stopping = EarlyStopping(
+    patience=20, verbose=False, path_checkpoint=None
+)  # Initialize early stopping class
 # loss_fn = MeanSquaredError()  # Loss function
 loss_fn = DiceLoss()
-npz_files = glob.glob("/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_v1/*")  # Saved datasets
+npz_files = glob.glob(
+    "/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_v1/*"
+)  # Saved datasets
 model_name = "/scratch/gpi/seis/jheuel/FirstBreakPicking/models/fbp_attention_bce_v1.pt"  # Model name
 
 # Start training
-split = int(len(npz_files) * validation_split)  # Split dataset for training and validation
+split = int(
+    len(npz_files) * validation_split
+)  # Split dataset for training and validation
 train_files = npz_files[:split]
 val_files = npz_files[split:]
 
@@ -31,15 +37,17 @@ val_files = npz_files[split:]
 best_model = SaveBestModel(model_name=model_name)
 
 # Create model
-model = UNet(depth=5,
-             kernel_size=(3, 7),
-             stride=(3, 3),
-             skip_connections=True,
-             out_channels=2,
-             filters_root=8,
-             output_activation=torch.nn.Softmax(dim=1),
-             drop_rate=0.0,
-             attention=True)
+model = UNet(
+    depth=2,
+    kernel_size=(3, 7),
+    stride=(3, 3),
+    skip_connections=True,
+    out_channels=2,
+    filters_root=8,
+    output_activation=torch.nn.Softmax(dim=1),
+    drop_rate=0.0,
+    attention=True,
+)
 
 # If GPU is available, bring model on GPU for faster training
 if torch.cuda.is_available() is True:
@@ -50,25 +58,20 @@ else:
     device = "cpu"
 
 # Print model
-summary(model,
-        input_size=shape,
-        device=device)
+summary(model, input_size=shape, device=device)
 
 # Define optimizer
-optimizer = torch.optim.Adam(model.parameters(),
-                             lr=learning_rate)
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # Create loader for training and validation
 train_dataset = FBP2OutChannels(npz_files=train_files)
 val_dataset = FBP2OutChannels(npz_files=val_files)
-train_dataloader = DataLoader(train_dataset,
-                              batch_size=batch_size,
-                              shuffle=True,
-                              num_workers=0)
-val_dataloader = DataLoader(val_dataset,
-                            batch_size=batch_size,
-                            shuffle=False,
-                            num_workers=0)
+train_dataloader = DataLoader(
+    train_dataset, batch_size=batch_size, shuffle=True, num_workers=0
+)
+val_dataloader = DataLoader(
+    val_dataset, batch_size=batch_size, shuffle=False, num_workers=0
+)
 
 # Start train loop
 train_loss = []
@@ -102,17 +105,19 @@ for epoch in range(epochs):
     avg_valid_loss.append(sum(valid_loss) / len(valid_loss))
 
     # Save model if validation loss decreased
-    best_model(current_valid_loss=avg_valid_loss[-1],
-               epoch=epoch,
-               model=model)
+    best_model(current_valid_loss=avg_valid_loss[-1], epoch=epoch, model=model)
 
     if epoch == 0:  # Save model_args as .json file after finishing of first epoch
-        json_fp = os.path.join(pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json")
+        json_fp = os.path.join(
+            pathlib.Path(model_name).parent, f"{pathlib.Path(model_name).stem}.json"
+        )
         with open(json_fp, "w") as json_fp:
             json.dump(model.get_model_args(), json_fp, indent=4)
 
-    print(f"Epoch {epoch + 1} | train loss: {avg_train_loss[-1]:.5f} | val loss: {avg_valid_loss[-1]:.5f}",
-          flush=True)
+    print(
+        f"Epoch {epoch + 1} | train loss: {avg_train_loss[-1]:.5f} | val loss: {avg_valid_loss[-1]:.5f}",
+        flush=True,
+    )
 
     # Re-open model for next epoch
     model.train()
