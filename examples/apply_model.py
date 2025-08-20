@@ -81,10 +81,10 @@ for l in range(data.shape[0]):
     time = (
         np.arange(len(data[l, :])) / metadata.loc[l, "sampling_rate"]
     )  # Convert to seconds
-    trace = data[l, :] - np.mean(data[l, :])
-    trace = trace / np.max(np.abs(trace))
+    trace = data[l, :] - np.mean(data[l, :])  # Remove mean from data
+    trace = trace / np.max(np.abs(trace))  # Normalize data to min-max
     normalized_data[l, :] = trace
-    ax1.plot(trace + (l + 0.5), time, color="k", linewidth=0.2)
+    ax1.plot(trace + (l + 0.5), time, color="k", linewidth=0.2)  # Plot each trace
 
     # Plot P arrival from metadata
     p_arrival_seconds = (
@@ -106,14 +106,14 @@ for l in range(data.shape[0]):
         true_picks.append(p_arrival_seconds)
 
     # Plot prediction
-    time_prediction = np.linspace(start=0, stop=time[-1], num=len(prediction[l, :]))
+    time_prediction = np.linspace(start=0, stop=time[-1], num=len(prediction[l, :]))  # Time array for prediction
 
     # Plot predicted first break pick
     # Note, if standard deviation from single predicted picks >= 5, the pick is ignored
     detections_seconds = detections_single[l] / (
         metadata.loc[l, "sampling_rate"] * prediction.shape[1] / data.shape[1]
     )
-    if np.std(detections[l]) <= 5:
+    if np.std(detections[l]) <= 5:  # Ignoring picks if std exceeds 5
         ax2.plot(
             [l, l + 1], [detections_seconds, detections_seconds], color="r", linewidth=2
         )
@@ -127,9 +127,11 @@ for l in range(data.shape[0]):
     # Further improvements:
     # If number of neighbouring picks is below a certain threshold, then ignore the predicted picks
 
-# Plot prediction
+# Plot prediction (i.e. color coded segmentation as background)
 ax1.pcolormesh(np.arange(data.shape[0]), time_prediction, prediction.T)
 ax2.pcolormesh(np.arange(data.shape[0]), time_prediction, prediction.T, alpha=0.9)
+
+# Plot seismic data as grey pcolormesh
 ax2.pcolormesh(
     np.arange(data.shape[0]),
     time,
@@ -139,7 +141,7 @@ ax2.pcolormesh(
     norm=colors.LogNorm(vmin=1e-7, vmax=0.01),
 )
 
-# Plot pick performance
+# Plot pick performance (new figure instance)
 fig, ax_residual = plt.subplots(nrows=1, ncols=1)
 residual_histogram(
     residuals=true_positives, axes=ax_residual, xlim=(-residual, residual)
