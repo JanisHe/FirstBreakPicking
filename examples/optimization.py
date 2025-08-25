@@ -253,7 +253,7 @@ def model_tester(
     metadata_path: str,
     test_files: list,
     reduced_traveltime: bool,
-    std_treshold: float = 5,
+    std_threshold: float = 5,
     residual: float = 0.05,
 ):
     # Define model (must match with trained model) by loading json file
@@ -320,7 +320,7 @@ def model_tester(
             detections_seconds = detections_single[l] / (
                 metadata.loc[l, "sampling_rate"] * prediction.shape[1] / data.shape[1]
             )
-            if np.std(detections[l]) <= std_treshold:
+            if np.std(detections[l]) <= std_threshold:
                 # Compute metrics
                 if np.abs(detections_seconds - p_arrival_seconds) <= residual:
                     true_positives.append(detections_seconds - p_arrival_seconds)
@@ -453,7 +453,7 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
         metadata_path=params["metadata"],
         test_files=glob.glob(params["test_files"]),
         reduced_traveltime=reduced_traveltime,
-        std_treshold=params["attention"]
+        std_threshold=params["std_threshold"]
     )
 
     # Rename json and model wrt to true positive rate (TPR)
