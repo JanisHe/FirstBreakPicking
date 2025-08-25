@@ -253,7 +253,8 @@ def model_tester(
     metadata_path: str,
     test_files: list,
     reduced_traveltime: bool,
-    residual: float = 0.5,
+    std_treshold: float = 5,
+    residual: float = 0.05,
 ):
     # Define model (must match with trained model) by loading json file
     json_fp = os.path.join(
@@ -319,7 +320,7 @@ def model_tester(
             detections_seconds = detections_single[l] / (
                 metadata.loc[l, "sampling_rate"] * prediction.shape[1] / data.shape[1]
             )
-            if np.std(detections[l]) <= 5:
+            if np.std(detections[l]) <= std_treshold:
                 # Compute metrics
                 if np.abs(detections_seconds - p_arrival_seconds) <= residual:
                     true_positives.append(detections_seconds - p_arrival_seconds)
@@ -452,6 +453,7 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
         metadata_path=params["metadata"],
         test_files=glob.glob(params["test_files"]),
         reduced_traveltime=reduced_traveltime,
+        std_treshold=params["attention"]
     )
 
     # Rename json and model wrt to true positive rate (TPR)
@@ -519,6 +521,7 @@ if __name__ == "__main__":
         "epochs": (500),
         "metadata": ("/scratch/gpi/seis/jheuel/FirstBreakPicking/metadata_v1"),
         "reduced_traveltime": ("True", "False"),
+        "std_threshold": (0, 100)
     }
 
     # Check limits for propulate
