@@ -1,0 +1,21 @@
+{
+    "in_channels": 1,
+    "out_channels": 2,
+    "filters_root": 8,
+    "kernel_size": [
+        3,
+        7
+    ],
+    "stride": [
+        3,
+        3
+    ],
+    "depth": 5,
+    "input_shape": [
+        32,
+        2048
+    ],
+    "drop_rate": 0.4319384598201549,
+    "skip_connections": true,
+    "attention": true
+}
