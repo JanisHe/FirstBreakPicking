@@ -309,18 +309,20 @@ def model_tester(
         detections_single = detect_phases(prediction=prediction, threshold=0.5)
 
         # Loop over each single trace
-        for l in range(data.shape[0]):
+        for l_idx in range(data.shape[0]):
             p_arrival_seconds = (
-                metadata.loc[l, "trace_P_arrival_sample"]
-                / metadata.loc[l, "sampling_rate"]
+                metadata.loc[l_idx, "trace_P_arrival_sample"]
+                / metadata.loc[l_idx, "sampling_rate"]
             )
-            if is_nan(p_arrival_seconds) == False:
+            if not is_nan(p_arrival_seconds):
                 true_picks.append(p_arrival_seconds)
 
-            detections_seconds = detections_single[l] / (
-                metadata.loc[l, "sampling_rate"] * prediction.shape[1] / data.shape[1]
+            detections_seconds = detections_single[l_idx] / (
+                metadata.loc[l_idx, "sampling_rate"]
+                * prediction.shape[1]
+                / data.shape[1]
             )
-            if np.std(detections[l]) <= std_threshold:
+            if np.std(detections[l_idx]) <= std_threshold:
                 # Compute metrics
                 if np.abs(detections_seconds - p_arrival_seconds) <= residual:
                     true_positives.append(detections_seconds - p_arrival_seconds)
@@ -397,11 +399,7 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
 
     # Move model to GPU if GPU is available
     if torch.cuda.is_available():
-        # device = subgroup_comm.rank % GPUS_PER_NODE   # Au Haicore werden alle gesehen, deswegen wird device gewaehlt
-        device = "cuda"  # Auf Juwels muss als device "cuda" benutzt werden
         model.cuda()
-    else:
-        device = "cpu"
 
     # Define loss function
     loss_fn = params["loss_fn"]
@@ -453,7 +451,7 @@ def ind_loss(params: dict[str, Union[int, float, str]]) -> float:
         metadata_path=params["metadata"],
         test_files=glob.glob(params["test_files"]),
         reduced_traveltime=reduced_traveltime,
-        std_threshold=params["std_threshold"]
+        std_threshold=params["std_threshold"],
     )
 
     # Rename json and model wrt to true positive rate (TPR)
@@ -521,7 +519,7 @@ if __name__ == "__main__":
         "epochs": (500),
         "metadata": ("/scratch/gpi/seis/jheuel/FirstBreakPicking/metadata_v1"),
         "reduced_traveltime": ("True", "False"),
-        "std_threshold": (0, 100)
+        "std_threshold": (0, 100),
     }
 
     # Check limits for propulate
@@ -548,26 +546,6 @@ if __name__ == "__main__":
         random_init_prob=0.1,  # Random-initialization probability
         rng=rng,  # Separate random number generator for Propulate optimization
     )
-
-    # # Set up propulator performing actual optimization.
-    # propulator = Propulator(
-    #     loss_fn=ind_loss,  # Loss function to optimize
-    #     propagator=propagator,  # Evolutionary operator
-    #     rng=rng,  # Random number generator
-    #     island_comm=comm,  # Communicator
-    #     generations=generations,  # Number of generations per worker
-    #     checkpoint_path=checkpoint_path,  # Path to save checkpoints to
-    # )
-    #
-    # # Run optimization and print summary of results.
-    # propulator.propulate(
-    #     logging_interval=1,
-    #     debug=2,  # Logging interval and verbosity level
-    # )
-    # propulator.summarize(
-    #     top_n=5,
-    #     debug=2,  # Print top-n best individuals on each island in summary.
-    # )
 
     # Set up island model.
     islands = Islands(

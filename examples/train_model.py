@@ -21,10 +21,8 @@ early_stopping = EarlyStopping(
 )  # Initialize early stopping class
 # loss_fn = MeanSquaredError()  # Loss function
 loss_fn = DiceLoss()
-npz_files = glob.glob(
-    "/scratch/gpi/seis/jheuel/FirstBreakPicking/npz_v1/*"
-)  # Saved datasets
-model_name = "/scratch/gpi/seis/jheuel/FirstBreakPicking/models/fbp_attention_bce_v1.pt"  # Model name
+npz_files = glob.glob("./train_data/*")  # Saved datasets
+model_name = "./models/my_fb_model"  # Model name
 
 # Start training
 split = int(
